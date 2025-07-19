@@ -1,7 +1,6 @@
 import os
 import telebot
 import requests
-from bs4 import BeautifulSoup
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
@@ -11,23 +10,41 @@ if not BOT_TOKEN:
 bot = telebot.TeleBot(BOT_TOKEN)
 
 def search_allegro(query):
-    url = f"https://allegro.pl/listing?string={query}"
+    url = f"https://allegro.pl/graphql"
     headers = {
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0",
+        "Content-Type": "application/json"
     }
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
-    results = []
+    payload = {
+        "operationName": "searchProducts",
+        "variables": {
+            "searchPhrase": query,
+            "first": 5
+        },
+        "query": """
+        query searchProducts($searchPhrase: String!, $first: Int!) {
+            search {
+                products(searchPhrase: $searchPhrase, first: $first) {
+                    edges {
+                        node {
+                            name
+                            url
+                        }
+                    }
+                }
+            }
+        }
+        """
+    }
 
-    for item in soup.select("article[data-analytics-view-custom-index]"):
-        title_tag = item.select_one("h2")
-        link_tag = item.select_one("a[href]")
-        if title_tag and link_tag:
-            title = title_tag.text.strip()
-            link = link_tag['href']
-            results.append(f"🔗 <a href='{link}'>{title}</a>")
-        if len(results) >= 5:
-            break
+    response = requests.post(url, json=payload, headers=headers)
+    data = response.json()
+
+    results = []
+    for item in data["data"]["search"]["products"]["edges"]:
+        name = item["node"]["name"]
+        link = item["node"]["url"]
+        results.append(f"🔗 <a href='{link}'>{name}</a>")
 
     return results or ["❌ Ничего не найдено."]
 
